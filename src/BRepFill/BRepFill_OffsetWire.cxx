@@ -1362,17 +1362,40 @@ void BRepFill_OffsetWire::FixHoles()
       TopoDS_Wire& Base = TopoDS::Wire( UnclosedWires(1) );
       TopoDS_Vertex Vf, Vl;
       TopExp::Vertices( Base, Vf, Vl );
+      // Avoid crash caused by attempt to construct BRep_Tool::Pnt from null
+      // TopoDS_Vertex. This can occur when a wire consists of a single edge.
+      if (Vf.IsNull() || Vl.IsNull())
+        {
+          IsolatedWires.Append( Base );
+          UnclosedWires.Remove( 1 );
+          continue;
+        }
       gp_Pnt Pf, Pl;
       Pf = BRep_Tool::Pnt(Vf);
       Pl = BRep_Tool::Pnt(Vl);
       Standard_Real DistF = RealLast(), DistL = RealLast();
       Standard_Integer IndexF = 0, IndexL = 0;
       Standard_Boolean IsFirstF = Standard_False, IsFirstL = Standard_False;
+
+      // Used to avoid crash caused by attempt to construct BRep_Tool::Pnt from
+      // null TopoDS_Vertex. This can occur when a wire consists of a single
+      // edge.
+      Standard_Boolean IsUncloseable = Standard_False;
+
       for (Standard_Integer i = 2; i <= UnclosedWires.Length(); i++)
 	{
 	  TopoDS_Wire aWire = TopoDS::Wire( UnclosedWires(i) );
 	  TopoDS_Vertex V1, V2;
 	  TopExp::Vertices( aWire, V1, V2 );
+
+	  // Avoid crash caused by attempt to construct BRep_Tool::Pnt from null
+	  // TopoDS_Vertex. This can occur when a wire consists of a single edge.
+	  if (V1.IsNull() || V2.IsNull())
+	    {
+	      IsUncloseable = Standard_True;
+	      break;
+	    }
+
 	  gp_Pnt P1, P2;
 	  P1 = BRep_Tool::Pnt(V1);
 	  P2 = BRep_Tool::Pnt(V2);
@@ -1405,6 +1428,15 @@ void BRepFill_OffsetWire::FixHoles()
 	      IsFirstL = Standard_False;
 	    }
 	}
+
+      // Treat uncloseable wire as isolated, and discard.
+      if (IsUncloseable)
+	{
+	  IsolatedWires.Append( Base );
+	  UnclosedWires.Remove( 1 );
+	  continue;
+	}
+
       TopoDS_Wire theWire;
       TopoDS_Edge theEdge;
       TopoDS_Vertex theVertex;
